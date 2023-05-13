@@ -55,9 +55,10 @@ def run_tabby(packages : List[PackageInfo]) :
                 outfile.write(line)
         outfile.close()
         os.rename(tabby_conf_mod, tabby_conf)
-        process = subprocess.run(["run.sh"], cwd=config.PATH_TABBY,
+        process = subprocess.run(['sh', "./run.sh"], cwd=config.PATH_TABBY,
                                  capture_output=True,
                                  text=True)
+        # TODO: print tabby output and add check for existence of this package in neo4j
         print(process.stdout)
         return_code = process.returncode
 
