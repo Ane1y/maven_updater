@@ -1,8 +1,12 @@
+import json
 import os
 import re
 import subprocess
 from collections import namedtuple
 from typing import List
+
+import neo4j
+from neo4j import GraphDatabase
 
 import config
 import utils
@@ -68,19 +72,34 @@ def run_tabby(packages : List[PackageInfo]) :
             print(f"tabby built a graph for {package.name} ver.{package.new_v}\n")
 
 
-def get_json_from_neo4j():
-    process = subprocess.run(["cypher-shell", f"-u {config.NEO4J_LOGIN}", f"-p {config.NEO4J_PASSWORD}",
-                              f"-a {config.NEO4J_ADDRESS}"],
-                             capture_output=True,
-                             text=True)
+def get_json_from_neo4j(source_lib : str, target_libs : List[str], json_path : str = './data'):
+    with GraphDatabase.driver(config.NEO4J_ADDRESS,
+                              auth=(config.NEO4J_LOGIN, config.NEO4J_PASSWORD)) as driver:
+        driver.verify_connectivity()
 
+        for lib in target_libs:
+            records, summary, keys = driver.execute_query(f"""
+                match (source:Method)
+                match (sink:Method)
+                    where source.CLASSNAME starts with '{source_lib}'
+                        and sink.CLASSNAME starts with '{lib}'
+                            and not sink.NAME starts with 'toString' and not sink.NAME  starts with 'hashCode'
+                            and not source.NAME starts with 'toString'  and not source.NAME  starts with 'hashCode'
+                        call apoc.algo.allSimplePaths(source,sink, "<CALL|ALIAS",5) yield path
+                return path limit 2
+                """, routing_=neo4j.RoutingControl.READ)
+            for record in records:
+                json_data = json.dumps(record.data())
+                with open(json_path + '/' + lib, 'w') as outfile:
+                    outfile.write(json_data)
 
 if __name__ == "__main__":
-    packages = get_updates()
-    print("Packages to update:\n", packages)
+    # packages = get_updates()
+    # print("Packages to update:\n", packages)
+    #
+    # if packages:
+    #     run_tabby(packages)
+    #     print("Retrieving data from neo4j\n")
+        get_json_from_neo4j('org.junit', ['com.sun.beans'])
 
-    if packages:
-        run_tabby(packages)
-        print("Retrieving data from neo4j\n")
-        get_json_from_neo4j()
 
